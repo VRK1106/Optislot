@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-black: #000000;
+            --bg-card: rgba(255, 255, 255, 0.05);
+            --bg-card-hover: rgba(255, 255, 255, 0.08);
+            --border-glossy: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #8b5cf6;
+            --shadow-glossy: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        body {
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-black);
+            color: var(--text-primary);
+            min-height: 100vh;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+        }
+
+        .hero-section {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid var(--border-glossy);
+            color: var(--text-primary);
+            padding: 3rem 0;
+            margin-bottom: 2rem;
+        }
+
+        .hero-section h1 {
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .hero-section .lead {
+            color: var(--text-secondary);
+        }
+
+        .stats-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(10px) saturate(180%);
+            -webkit-backdrop-filter: blur(10px) saturate(180%);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: var(--shadow-glossy);
+            border: 1px solid var(--border-glossy);
+            transition: all 0.3s ease;
+        }
+
+        .stats-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .stats-card h6 {
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .action-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(10px) saturate(180%);
+            -webkit-backdrop-filter: blur(10px) saturate(180%);
+            border-radius: 20px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-glossy);
+            box-shadow: var(--shadow-glossy);
+            height: 100%;
+            transition: all 0.3s ease;
+        }
+
+        .action-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .action-card h5 {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .btn-custom {
+            border-radius: 12px;
+            padding: 12px 25px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary-custom {
+            background: var(--accent-blue);
+            border: none;
+            color: white;
+        }
+
+        .btn-primary-custom:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+            color: white;
+        }
+
+        .btn-success {
+            background: var(--accent-green);
+            border: none;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-danger {
+            background: var(--accent-red);
+            border: none;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-outline-dark {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glossy);
+            color: var(--text-primary);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-outline-dark:hover {
+            background: var(--bg-card-hover);
+            border-color: rgba(255, 255, 255, 0.2);
+            color: var(--text-primary);
+            transform: translateY(-2px);
+        }
+
+        .form-control,
+        .form-select {
+            border-radius: 12px;
+            padding: 12px 20px;
+            border: 1px solid var(--border-glossy);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: var(--accent-blue);
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            color: var(--text-primary);
+        }
+
+        .form-control::placeholder {
+            color: rgba(160, 160, 160, 0.5);
+        }
+
+        .form-label {
+            color: var(--text-secondary);
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .utilization-badge {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .bg-light {
+            background: rgba(255, 255, 255, 0.03) !important;
+            border: 1px solid var(--border-glossy);
+        }
+
+        .text-muted {
+            color: var(--text-secondary) !important;
+        }
+
+        .text-success {
+            color: var(--accent-green) !important;
+        }
+
+        .text-danger {
+            color: var(--accent-red) !important;
+        }
+
+        .text-warning {
+            color: var(--accent-orange) !important;
+        }
+
+        .badge {
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+        }
+
+        .bg-secondary {
+            background: rgba(160, 160, 160, 0.2) !important;
+            color: var(--text-secondary) !important;
+        }
+
+        .bg-info {
+            background: var(--accent-blue) !important;
+        }
+
+        .bg-primary {
+            background: var(--accent-purple) !important;
+        }
+
+        .bg-warning {
+            background: var(--accent-orange) !important;
+        }
+
+        hr {
+            border-color: var(--border-glossy);
+            opacity: 1;
+        }
+
+        option {
+            background: #1a1a1a;
+            color: var(--text-primary);
+        }
+
+        .camera-preview img {
+            max-height: 180px;
+            object-fit: cover;
+        }
+
+        .camera-off {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="hero-section text-center">
+        <div class="container">
+            <h1 class="display-4 fw-bold mb-2">Smart Parking</h1>
+            <p class="lead opacity-75">Intelligent Management System</p>
+        </div>
+    </div>
+
+    <div class="container" style="margin-top: -50px;">
+        <!-- Top Stats -->
+        <div class="row justify-content-center mb-4">
+            <div class="col-lg-8">
+                <div class="stats-card text-center">
+                    <h6 class="text-uppercase text-muted fw-bold ls-1">Current Utilization</h6>
+                    <div class="utilization-badge mb-3">{{ utilization }}%</div>
+                    <a href="/status" class="btn btn-outline-dark btn-custom w-100 py-3">
+                        📊 View Live Allotment Status
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Cards with Camera Feeds -->
+        <div class="row g-4 mb-5">
+            <!-- Entry Card with Camera -->
+            <div class="col-md-6">
+                <div class="action-card">
+                    <h5 class="fw-bold mb-3">🚗 Vehicle Entry</h5>
+
+                    <!-- Entry Camera Feed -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Entry Camera</label>
+                        <div class="camera-preview" id="entryCameraPreview">
+                            <img src="{{ url_for('video_feed') }}" width="100%"
+                                style="border-radius: 10px; border: 1px solid var(--border-glossy);">
+                        </div>
+                        <button class="btn btn-sm btn-outline-dark w-100 mt-2" id="entryFeedToggle"
+                            onclick="toggleFeed('entry')">
+                            🔴 Turn Feed OFF
+                        </button>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Vehicle Size</label>
+                        <select id="entrySize" class="form-select">
+                            <option value="small">Small (Bike)</option>
+                            <option value="medium" selected>Medium (Car)</option>
+                            <option value="large">Large (SUV)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Registration Number</label>
+                        <input type="text" id="entryReg" class="form-control" placeholder="MH02AB1234">
+                    </div>
+                    <button class="btn btn-primary-custom w-100 btn-custom mb-2" onclick="scanPlate()">
+                        📷 Scan Entry Camera
+                    </button>
+                    <div id="anprResult" class="form-text mt-2 mb-3 fw-bold small"></div>
+                    <button class="btn btn-success w-100 btn-custom" onclick="vehicleEntry()">
+                        ✅ Allot Slot
+                    </button>
+                    <div id="entryResult" class="mt-2 small fw-bold"></div>
+                </div>
+            </div>
+
+            <!-- Exit Card with Camera -->
+            <div class="col-md-6">
+                <div class="action-card">
+                    <h5 class="fw-bold mb-3">👋 Vehicle Exit</h5>
+
+                    <!-- Exit Camera Feed -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Exit Camera</label>
+                        <div class="camera-preview" id="exitCameraPreview">
+                            <img src="{{ url_for('video_feed') }}" width="100%"
+                                style="border-radius: 10px; border: 1px solid var(--border-glossy);">
+                        </div>
+                        <button class="btn btn-sm btn-outline-dark w-100 mt-2" id="exitFeedToggle"
+                            onclick="toggleFeed('exit')">
+                            🔴 Turn Feed OFF
+                        </button>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Registration Number</label>
+                        <input type="text" id="exitReg" class="form-control" placeholder="MH02AB1234">
+                    </div>
+                    <button class="btn btn-primary-custom w-100 btn-custom mb-2" onclick="scanPlateForExit()">
+                        📷 Scan Exit Camera
+                    </button>
+                    <div id="exitAnprResult" class="form-text mt-2 mb-3 fw-bold small"></div>
+                    <button class="btn btn-danger w-100 btn-custom" onclick="vehicleExit()">
+                        ❌ Exit Vehicle
+                    </button>
+                    <div id="exitResult" class="mt-2 small fw-bold"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ultrasonic Card -->
+        <div class="row g-4 mb-5">
+            <div class="col-md-12">
+                <div class="action-card">
+                    <h5 class="fw-bold mb-3">📡 Ultrasonic Gate</h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Left Sensor (cm)</label>
+                                <input type="number" id="leftSensor" class="form-control" placeholder="Enter cm"
+                                    oninput="calculateWidth()">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Right Sensor (cm)</label>
+                                <input type="number" id="rightSensor" class="form-control" placeholder="Enter cm"
+                                    oninput="calculateWidth()">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 bg-light rounded-3 text-center" style="height: calc(100% - 1.5rem);">
+                                <div class="small text-muted">Calculated Width</div>
+                                <div id="calcWidth" class="h4 fw-bold mb-0">-- cm</div>
+                                <div id="calcCategory" class="badge bg-secondary mt-2">Waiting...</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <button class="btn btn-primary-custom w-100 btn-custom" onclick="autoFillSize()">
+                                ⬇️ Auto-Fill Entry
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <button class="btn btn-danger w-100 btn-custom" onclick="resetParking()">
+                                ⚠️ Release All Slots
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Camera feed state tracking
+        const cameraStates = {
+            entry: true,
+            exit: true
+        };
+
+        function toggleFeed(feedType) {
+            const previewId = feedType + 'CameraPreview';
+            const buttonId = feedType + 'FeedToggle';
+            const preview = document.getElementById(previewId);
+            const button = document.getElementById(buttonId);
+
+            cameraStates[feedType] = !cameraStates[feedType];
+
+            if (cameraStates[feedType]) {
+                preview.classList.remove('camera-off');
+                button.innerHTML = '🔴 Turn Feed OFF';
+            } else {
+                preview.classList.add('camera-off');
+                button.innerHTML = '🟢 Turn Feed ON';
+            }
+        }
+
+        async function vehicleEntry() {
+            try {
+                const reg = document.getElementById('entryReg').value;
+                const size = document.getElementById('entrySize').value;
+                if (!reg) return alert("Enter Registration Number");
+
+                const res = await fetch('/entry', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reg_num: reg, vehicle_size: size })
+                });
+                const data = await res.json();
+                document.getElementById('entryResult').innerText = data.message || data.error;
+                document.getElementById('entryResult').className = res.ok ? "mt-2 small fw-bold text-success" : "mt-2 small fw-bold text-danger";
+                if (res.ok) setTimeout(() => window.location.reload(), 1000);
+            } catch (error) {
+                console.error(error);
+                alert("Error: " + error.message);
+            }
+        }
+
+        async function vehicleExit() {
+            try {
+                const reg = document.getElementById('exitReg').value;
+                if (!reg) return alert("Enter Registration Number");
+
+                const res = await fetch('/exit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reg_num: reg })
+                });
+                const data = await res.json();
+                document.getElementById('exitResult').innerText = data.message || data.error;
+                document.getElementById('exitResult').className = res.ok ? "mt-2 small fw-bold text-success" : "mt-2 small fw-bold text-danger";
+                if (res.ok) setTimeout(() => window.location.reload(), 1000);
+            } catch (error) {
+                console.error(error);
+                alert("Error: " + error.message);
+            }
+        }
+
+        async function scanPlate() {
+            const resultDiv = document.getElementById('anprResult');
+            resultDiv.innerText = "Capturing & Scanning... (Please wait)";
+            resultDiv.className = "form-text mt-2 fw-bold text-warning";
+
+            try {
+                const res = await fetch('/anpr', {
+                    method: 'POST'
+                });
+
+                if (!res.ok) {
+                    throw new Error(`Server Error: ${res.status}`);
+                }
+
+                const data = await res.json();
+
+                if (data.reg_num) {
+                    document.getElementById('entryReg').value = data.reg_num;
+                    resultDiv.innerText = "Detected: " + data.reg_num;
+                    resultDiv.className = "form-text mt-2 fw-bold text-success";
+                } else {
+                    resultDiv.innerText = data.error || "Failed to detect text";
+                    resultDiv.className = "form-text mt-2 fw-bold text-danger";
+                }
+            } catch (error) {
+                console.error(error);
+                resultDiv.innerText = "Error: " + error.message;
+                resultDiv.className = "form-text mt-2 fw-bold text-danger";
+            }
+        }
+
+        async function scanPlateForExit() {
+            const resultDiv = document.getElementById('exitAnprResult');
+            resultDiv.innerText = "Capturing & Scanning... (Please wait)";
+            resultDiv.className = "form-text mt-2 fw-bold text-warning";
+
+            try {
+                const res = await fetch('/anpr', {
+                    method: 'POST'
+                });
+
+                if (!res.ok) {
+                    throw new Error(`Server Error: ${res.status}`);
+                }
+
+                const data = await res.json();
+
+                if (data.reg_num) {
+                    document.getElementById('exitReg').value = data.reg_num;
+                    resultDiv.innerText = "Detected: " + data.reg_num;
+                    resultDiv.className = "form-text mt-2 fw-bold text-success";
+                } else {
+                    resultDiv.innerText = data.error || "Failed to detect text";
+                    resultDiv.className = "form-text mt-2 fw-bold text-danger";
+                }
+            } catch (error) {
+                console.error(error);
+                resultDiv.innerText = "Error: " + error.message;
+                resultDiv.className = "form-text mt-2 fw-bold text-danger";
+            }
+        }
+
+        function calculateWidth() {
+            const GATE_WIDTH = 300;
+            const left = parseFloat(document.getElementById('leftSensor').value) || 0;
+            const right = parseFloat(document.getElementById('rightSensor').value) || 0;
+
+            if (left === 0 && right === 0) return;
+
+            const width = GATE_WIDTH - (left + right);
+            document.getElementById('calcWidth').innerText = width + " cm";
+
+            let category = "Unknown";
+            let badgeClass = "bg-secondary";
+            let sizeValue = "medium";
+
+            if (width < 120) {
+                category = "Bike 🏍️";
+                badgeClass = "bg-info";
+                sizeValue = "small";
+            } else if (width >= 120 && width < 165) {
+                category = "Small Car 🚗";
+                badgeClass = "bg-primary";
+                sizeValue = "medium";
+            } else if (width >= 165 && width < 179) {
+                category = "Medium Car 🚙";
+                badgeClass = "bg-warning text-dark";
+                sizeValue = "medium";
+            } else if (width >= 179) {
+                category = "Large Car 🚙";
+                badgeClass = "bg-danger";
+                sizeValue = "large";
+            }
+
+            const badge = document.getElementById('calcCategory');
+            badge.innerText = category;
+            badge.className = `badge ${badgeClass} mt-2`;
+            badge.dataset.size = sizeValue;
+        }
+
+        function autoFillSize() {
+            const badge = document.getElementById('calcCategory');
+            const size = badge.dataset.size;
+            if (size) {
+                document.getElementById('entrySize').value = size;
+            } else {
+                alert("Please enter sensor values first.");
+            }
+        }
+
+        async function resetParking() {
+            if (!confirm("⚠️ WARNING: This will release ALL slots and clear all data. Are you sure?")) return;
+
+            try {
+                const res = await fetch('/reset', {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                alert(data.message);
+                window.location.reload();
+            } catch (error) {
+                console.error(error);
+                alert("Error: " + error.message);
+            }
+        }
+    </script>
+</body>
+
+</html>

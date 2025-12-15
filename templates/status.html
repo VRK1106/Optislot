@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parking Status • Live Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-black: #000000;
+            --bg-card: rgba(255, 255, 255, 0.05);
+            --bg-card-hover: rgba(255, 255, 255, 0.08);
+            --border-glossy: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #8b5cf6;
+            --shadow-glossy: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-black);
+            color: var(--text-primary);
+            min-height: 100vh;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+        }
+
+        .header-section {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid var(--border-glossy);
+            padding: 2rem 0;
+            margin-bottom: 3rem;
+        }
+
+        .header-section h2 {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .back-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glossy);
+            color: var(--text-primary);
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow-glossy);
+        }
+
+        .back-btn:hover {
+            background: var(--bg-card-hover);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            color: var(--text-primary);
+        }
+
+        .filters-container {
+            background: var(--bg-card);
+            padding: 0.75rem;
+            border-radius: 16px;
+            backdrop-filter: blur(10px) saturate(180%);
+            border: 1px solid var(--border-glossy);
+            display: inline-flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            box-shadow: var(--shadow-glossy);
+        }
+
+        .filter-pill {
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            padding: 0.6rem 1.2rem;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        .filter-pill:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .filter-pill.active {
+            background: var(--text-primary);
+            color: var(--bg-black);
+        }
+
+        .legend-box {
+            background: var(--bg-card);
+            padding: 1rem 1.5rem;
+            border-radius: 16px;
+            backdrop-filter: blur(10px) saturate(180%);
+            border: 1px solid var(--border-glossy);
+            display: inline-flex;
+            gap: 1.5rem;
+            box-shadow: var(--shadow-glossy);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .dot.green {
+            background: var(--accent-green);
+        }
+
+        .dot.orange {
+            background: var(--accent-orange);
+        }
+
+        .dot.red {
+            background: var(--accent-red);
+        }
+
+        .slot-card {
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            border-radius: 16px;
+            margin-bottom: 1.5rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: visible;
+            backdrop-filter: blur(10px) saturate(180%);
+            -webkit-backdrop-filter: blur(10px) saturate(180%);
+            border: 1px solid var(--border-glossy);
+            box-shadow: var(--shadow-glossy);
+        }
+
+        .slot-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .slot-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 1.2rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        icon {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .slot-id {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+            letter-spacing: -0.01em;
+        }
+
+        .reg-num {
+            font-size: 1rem;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 0.4rem 1rem;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            margin-top: 0.5rem;
+            letter-spacing: 0.05em;
+        }
+
+        .status-footer {
+            width: 100%;
+            padding: 0.75rem;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            border-radius: 0 0 16px 16px;
+        }
+
+        /* Status States */
+        .slot-free {
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        .slot-free .icon {
+            color: var(--accent-green);
+        }
+
+        .slot-free .slot-id {
+            color: var(--accent-green);
+        }
+
+        .slot-free .status-footer {
+            background: var(--accent-green);
+            color: var(--bg-black);
+        }
+
+        .slot-pending {
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        .slot-pending .icon {
+            color: var(--accent-orange);
+        }
+
+        .slot-pending .slot-id {
+            color: var(--accent-orange);
+        }
+
+        .slot-pending .status-footer {
+            background: var(--accent-orange);
+            color: var(--bg-black);
+        }
+
+        .slot-verified {
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .slot-verified .icon {
+            color: var(--accent-red);
+        }
+
+        .slot-verified .slot-id {
+            color: var(--accent-red);
+        }
+
+        .slot-verified .status-footer {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        /* Size Indicators */
+        .slot-small {
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .slot-small::after {
+            content: 'S';
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            background: var(--accent-blue);
+            color: white;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            z-index: 10;
+        }
+
+        .slot-medium {
+            border-left: 3px solid var(--accent-purple);
+        }
+
+        .slot-medium::after {
+            content: 'M';
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            background: var(--accent-purple);
+            color: white;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            z-index: 10;
+        }
+
+        .slot-large {
+            border-left: 3px solid #ec4899;
+        }
+
+        .slot-large::after {
+            content: 'L';
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            background: #ec4899;
+            color: white;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            .header-section h2 {
+                font-size: 1.5rem;
+            }
+
+            .slot-card {
+                height: 180px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header-section">
+        <div class="container">
+            <h2 class="text-center mb-3">🅿️ Live Parking Status</h2>
+            <div class="d-flex justify-content-center gap-3 mb-4">
+                <a href="/" class="back-btn text-decoration-none">← Dashboard</a>
+            </div>
+
+            <div class="d-flex justify-content-center flex-wrap gap-3 mb-4">
+                <div class="filters-container">
+                    <button class="filter-pill active" id="pill-status-all"
+                        onclick="filterSlots('status', 'all')">All</button>
+                    <button class="filter-pill" id="pill-status-free"
+                        onclick="filterSlots('status', 'free')">Free</button>
+                    <button class="filter-pill" id="pill-status-occupied"
+                        onclick="filterSlots('status', 'occupied')">Occupied</button>
+                </div>
+
+                <div class="filters-container">
+                    <button class="filter-pill active" id="pill-size-all" onclick="filterSlots('size', 'all')">All
+                        Sizes</button>
+                    <button class="filter-pill" id="pill-size-small"
+                        onclick="filterSlots('size', 'small')">Small</button>
+                    <button class="filter-pill" id="pill-size-medium"
+                        onclick="filterSlots('size', 'medium')">Medium</button>
+                    <button class="filter-pill" id="pill-size-large"
+                        onclick="filterSlots('size', 'large')">Large</button>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <div class="legend-box">
+                    <div class="legend-item"><span class="dot green"></span> Available</div>
+                    <div class="legend-item"><span class="dot orange"></span> Pending Check</div>
+                    <div class="legend-item"><span class="dot red"></span> Verified</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container pb-5">
+        <div class="row" id="slots-container">
+            {% for slot in slots %}
+            {% set status_class = 'slot-free' %}
+            {% set icon = '✨' %}
+            {% set display_status = 'free' %}
+            {% set footer_text = 'Available' %}
+
+            {% if slot.status == 'occupied' %}
+            {% if slot.is_verified == 1 %}
+            {% set status_class = 'slot-verified' %}
+            {% set icon = '✅' %}
+            {% set display_status = 'occupied' %}
+            {% set footer_text = 'Verified' %}
+            {% else %}
+            {% set status_class = 'slot-pending' %}
+            {% set icon = '⚠️' %}
+            {% set display_status = 'occupied' %}
+            {% set footer_text = 'Check Pending' %}
+            {% endif %}
+            {% endif %}
+
+            <div class="col-6 col-md-4 col-lg-2 slot-item" data-status="{{ display_status }}"
+                data-size="{{ slot.size_type }}">
+                <div class="slot-card {{ status_class }} slot-{{ slot.size_type }}">
+                    <div class="slot-content">
+                        <div class="icon">{{ icon }}</div>
+                        <div class="slot-id">{{ slot.slot_id }}</div>
+                        {% if slot.reg_num %}
+                        <div class="reg-num">{{ slot.reg_num }}</div>
+                        {% else %}
+                        <div class="small text-muted opacity-50">{{ slot.size_type|capitalize }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="status-footer">{{ footer_text }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        let currentStatus = localStorage.getItem('filterStatus') || 'all';
+        let currentSize = localStorage.getItem('filterSize') || 'all';
+
+        function applyFilters() {
+            document.querySelectorAll('[id^="pill-status-"]').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`pill-status-${currentStatus}`)?.classList.add('active');
+
+            document.querySelectorAll('[id^="pill-size-"]').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`pill-size-${currentSize}`)?.classList.add('active');
+
+            const items = document.querySelectorAll('.slot-item');
+            items.forEach(item => {
+                const statusMatch = (currentStatus === 'all') || (currentStatus === item.dataset.status);
+                const sizeMatch = (currentSize === 'all') || (currentSize === item.dataset.size);
+                item.style.display = (statusMatch && sizeMatch) ? 'block' : 'none';
+            });
+        }
+
+        function filterSlots(type, value) {
+            if (type === 'status') {
+                currentStatus = value;
+                localStorage.setItem('filterStatus', value);
+            } else {
+                currentSize = value;
+                localStorage.setItem('filterSize', value);
+            }
+            applyFilters();
+        }
+
+        document.addEventListener('DOMContentLoaded', applyFilters);
+        // Refresh every 3 seconds to show updates faster
+        setTimeout(() => window.location.reload(), 3000);
+    </script>
+</body>
+
+</html>
