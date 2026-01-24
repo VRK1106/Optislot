@@ -1,0 +1,27 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv
+env.bak/
+venv.bak/
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Docker
+.docker/
+
+# EasyOCR
+easyocr_models/
+
+# QR Codes (Generated)
+qrs/

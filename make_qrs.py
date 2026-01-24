@@ -32,18 +32,23 @@ def generate_qrs():
                 print(f"Error deleting {file_path}: {e}")
         print(f"Cleared existing QR codes in {QR_DIR}")
 
-    # Use Local IP for development/local testing
-    # local_ip = get_local_ip()
-    # base_url = f"http://{local_ip}:5000/verify_ui"
-    # print(f"Using Local IP: {base_url}")
-    
-    # Priority 1: Use Static Short.io Link (Best for Stable QRs)
-    # The Cloudflare URL changes, but this link is updated by update_link.py
-    base_url = "https://smart-parking.short.gy/parking"
-    print(f"Using Static Short Link: {base_url}")
-
-    # Legacy/Debug overrides (Commented out)
-    # base_url = "https://your-ngrok-url.ngrok-free.dev/verify_ui"
+    # Priority 1: Fetch Dynamic URL from Database (NetworkManager)
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    try:
+        c.execute("SELECT public_url FROM network_config WHERE id=1")
+        row = c.fetchone()
+        if row and row[0]:
+            base_url = f"{row[0]}/verify_ui"
+            print(f"Using Dynamic Network URL: {base_url}")
+        else:
+            base_url = "http://127.0.0.1:5000/verify_ui"
+            print("Warning: No network config found. Using Localhost.")
+    except Exception as e:
+        base_url = "http://127.0.0.1:5000/verify_ui"
+        print(f"Error reading network config: {e}")
+    finally:
+        conn.close()
     
     print(f"Generating QR codes pointing to: {base_url}?slot_id=<slot_id>")
 

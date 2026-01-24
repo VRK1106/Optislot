@@ -4,130 +4,387 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="10">
-
-    <title>Smart Parking Dashboard</title>
-
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
+    <title>Live Dashboard - Smart Parking</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
     <style>
+        :root {
+            --bg-color: #0f1218;
+            --card-bg: #1a1f2b;
+            --input-bg: #232936;
+            --text-primary: #ffffff;
+            --text-secondary: #9ca3af;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --radius-lg: 24px;
+            --radius-md: 16px;
+        }
+
         body {
-            background-color: #f4f7f6;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
         }
 
-        .slot {
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 15px;
-            min-height: 120px;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            transition: all 0.2s ease-in-out;
+        .navbar-custom {
+            background: rgba(15, 18, 24, 0.9);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            margin-bottom: 2rem;
         }
 
-        /* Green for free slots */
-        .slot-free {
-            background-color: #d4edda;
-            /* Bootstrap 'success' light */
-            border-color: #c3e6cb;
-            color: #155724;
+        .stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
         }
 
-        /* Red for occupied slots */
-        .slot-occupied {
-            background-color: #f8d7da;
-            /* Bootstrap 'danger' light */
-            border-color: #f5c6cb;
-            color: #721c24;
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
         }
 
-        .slot-occupied strong {
-            font-size: 1.1em;
+        .filter-bar {
+            background: var(--card-bg);
+            padding: 1rem;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            margin-bottom: 1.5rem;
         }
 
-        .slot-id {
-            font-weight: bold;
-            font-size: 1.25em;
-            display: block;
-            margin-bottom: 5px;
+        .slot-tile {
+            background: rgba(26, 31, 43, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
 
-        .slot-size {
-            font-style: italic;
-            font-size: 0.9em;
-            color: #555;
+        .slot-tile:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.4);
+            background: rgba(26, 31, 43, 0.8);
+            border-color: rgba(255, 255, 255, 0.1);
         }
 
-        .slot-reg {
-            font-family: 'Courier New', Courier, monospace;
-            font-weight: bold;
-            margin-top: 5px;
-            font-size: 1.1em;
+        .slot-tile.free .status-indicator {
+            background: #10b981;
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .slot-tile.occupied .status-indicator {
+            background: #ef4444;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .slot-tile.reserved .status-indicator {
+            background: #f59e0b;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+        }
+
+        .slot-tile.misuse .status-indicator {
+            background: #f59e0b;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .slot-tile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .slot-tile-id {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .slot-tile-size {
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .slot-tile-reg {
+            font-family: 'monospace';
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #fbbf24;
+            /* Amber */
+            margin-top: 0.5rem;
+        }
+
+        .slot-tile-duration {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        .status-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .status-badge.free {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+        }
+
+        .status-badge.occupied {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+        }
+
+        .status-badge.reserved {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+        }
+
+        .search-input {
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: white;
+            border-radius: 10px;
+            padding: 8px 12px;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
         }
     </style>
 </head>
 
 <body>
-    <div class="container my-5">
-        <h1 class="text-center mb-4">Vehicle Size-Based Parking Status</h1>
-        <p class="text-center text-muted">Dashboard auto-refreshes every 5 seconds.</p>
 
-        <hr class="my-4">
-        <h2>Small Slots (Two-Wheelers)</h2>
-        <div class="row">
-            {% for slot in slots if slot.vehicle_size == 'small' %}
-            <div class="col-6 col-md-3 col-lg-2">
-                <div class="slot slot-{{ slot.status }}">
-                    <span class="slot-id">{{ slot.slot_id }}</span>
-                    <span class="slot-size">({{ slot.vehicle_size }})</span>
-                    {% if slot.status == 'occupied' %}
-                    <span class="slot-reg">{{ slot.reg_num }}</span>
-                    {% else %}
-                    <span class="text-success fw-bold">Available</span>
-                    {% endif %}
+    <nav class="navbar-custom animate__animated animate__fadeInDown">
+        <div class="container d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                <a href="/" class="btn btn-outline-light btn-sm rounded-pill px-3">
+                    <i class="fas fa-arrow-left me-1"></i> Operations
+                </a>
+                <h4 class="m-0 fw-bold">Live Board</h4>
+            </div>
+            <button class="btn btn-primary btn-sm rounded-pill px-3" onclick="loadData()">
+                <i class="fas fa-sync-alt me-1"></i> Refresh
+            </button>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+
+        <!-- Stats Overview -->
+        <div class="row g-4 mb-4 animate__animated animate__fadeInUp">
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div class="stat-icon bg-primary bg-opacity-20 text-primary"><i class="fas fa-th"></i></div>
+                    <div>
+                        <h6 class="text-secondary m-0 text-uppercase small ls-1">Total Slots</h6>
+                        <h2 class="m-0 fw-bold" id="statTotal">--</h2>
+                    </div>
                 </div>
             </div>
-            {% endfor %}
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div class="stat-icon bg-success bg-opacity-20 text-success"><i class="fas fa-check"></i></div>
+                    <div>
+                        <h6 class="text-secondary m-0 text-uppercase small ls-1">Available</h6>
+                        <h2 class="m-0 fw-bold text-success" id="statFree">--</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div class="stat-icon bg-danger bg-opacity-20 text-danger"><i class="fas fa-car"></i></div>
+                    <div>
+                        <h6 class="text-secondary m-0 text-uppercase small ls-1">Occupied</h6>
+                        <h2 class="m-0 fw-bold text-danger" id="statOccupied">--</h2>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <hr class="my-4">
-        <h2>Medium Slots (Cars)</h2>
-        <div class="row">
-            {% for slot in slots if slot.vehicle_size == 'medium' %}
-            <div class="col-6 col-md-3 col-lg-2">
-                <div class="slot slot-{{ slot.status }}">
-                    <span class="slot-id">{{ slot.slot_id }}</span>
-                    <span class="slot-size">({{ slot.vehicle_size }})</span>
-                    {% if slot.status == 'occupied' %}
-                    <span class="slot-reg">{{ slot.reg_num }}</span>
-                    {% else %}
-                    <span class="text-success fw-bold">Available</span>
-                    {% endif %}
+        <!-- Filters -->
+        <div
+            class="filter-bar d-flex flex-wrap gap-3 align-items-center justify-content-between animate__animated animate__fadeInUp animate__delay-1s">
+            <div class="d-flex gap-3 align-items-center flex-grow-1">
+                <div class="input-group" style="max-width: 250px;">
+                    <span class="input-group-text bg-transparent border-secondary text-secondary"><i
+                            class="fas fa-search"></i></span>
+                    <input type="text" id="searchReg" class="form-control bg-dark border-secondary text-white"
+                        placeholder="Search Reg..." onkeyup="filterData()">
                 </div>
+
+                <select id="filterStatus" class="form-select bg-dark border-secondary text-white" style="width: 150px;"
+                    onchange="filterData()">
+                    <option value="all">Status: All</option>
+                    <option value="free">Available</option>
+                    <option value="occupied">Occupied</option>
+                </select>
+
+                <select id="filterSize" class="form-select bg-dark border-secondary text-white" style="width: 150px;"
+                    onchange="filterData()">
+                    <option value="all">Size: All</option>
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                </select>
             </div>
-            {% endfor %}
+            <div class="text-secondary small">
+                Showing <span class="fw-bold text-white" id="visibleCount">--</span> slots
+            </div>
         </div>
 
-        <hr class="my-4">
-        <h2>Large Slots (SUVs / Vans)</h2>
-        <div class="row">
-            {% for slot in slots if slot.vehicle_size == 'large' %}
-            <div class="col-6 col-md-3 col-lg-2">
-                <div class="slot slot-{{ slot.status }}">
-                    <span class="slot-id">{{ slot.slot_id }}</span>
-                    <span class="slot-size">({{ slot.vehicle_size }})</span>
-                    {% if slot.status == 'occupied' %}
-                    <span class="slot-reg">{{ slot.reg_num }}</span>
-                    {% else %}
-                    <span class="text-success fw-bold">Available</span>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
+        <!-- Slot Grid -->
+        <div class="row g-3" id="slotGrid">
+            <!-- Tiles will be rendered here by JavaScript -->
+        </div>
+        <div id="emptyState" class="text-center py-5 text-secondary d-none">
+            <i class="fas fa-search fs-1 mb-3 opacity-25"></i>
+            <p>No parking slots match your criteria.</p>
         </div>
 
     </div>
+
+    <script>
+        let allSlots = [];
+
+        async function loadData() {
+            try {
+                const res = await fetch('/api/slots');
+                allSlots = await res.json();
+                renderStats();
+                filterData();
+            } catch (e) { console.error("Fetch error", e); }
+        }
+
+        function renderStats() {
+            const total = allSlots.length;
+            const free = allSlots.filter(s => s.status === 'free').length;
+            const occ = allSlots.filter(s => s.status === 'occupied' || s.status === 'reserved').length;
+
+            document.getElementById('statTotal').innerText = total;
+            document.getElementById('statFree').innerText = free;
+            document.getElementById('statOccupied').innerText = occ;
+        }
+
+        function filterData() {
+            const search = document.getElementById('searchReg').value.toUpperCase();
+            const status = document.getElementById('filterStatus').value;
+            const size = document.getElementById('filterSize').value;
+
+            const filtered = allSlots.filter(s => {
+                if (status !== 'all' && s.status !== status) return false;
+                if (size !== 'all' && s.size_type !== size) return false;
+                if (search && (!s.reg_num || !s.reg_num.includes(search))) return false;
+                return true;
+            });
+
+            renderTiles(filtered);
+            document.getElementById('visibleCount').innerText = filtered.length;
+
+            const empty = document.getElementById('emptyState');
+            if (filtered.length === 0) empty.classList.remove('d-none');
+            else empty.classList.add('d-none');
+        }
+
+        function renderTiles(data) {
+            const slotGrid = document.getElementById('slotGrid');
+            slotGrid.innerHTML = '';
+            const now = new Date();
+
+            data.forEach(slot => {
+                // Duration
+                let duration = '';
+                if (slot.entry_time) {
+                    const entry = new Date(slot.entry_time);
+                    const diffMins = Math.floor((now - entry) / 60000);
+                    const hrs = Math.floor(diffMins / 60);
+                    const mins = diffMins % 60;
+                    duration = `${hrs}h ${mins}m`;
+                }
+
+                // Vehicle
+                let vehicle = '<div class="text-secondary opacity-50 small" style="min-height: 1.5em;">Empty</div>';
+                if (slot.reg_num) {
+                    vehicle = `<div class="slot-tile-reg text-warning font-monospace fs-5">${slot.reg_num}</div>`;
+                }
+
+                // Badge Logic
+                let badgeClass = 'bg-secondary';
+                let statusText = slot.status;
+                if (slot.status === 'free') { badgeClass = 'bg-success bg-opacity-10 text-success'; statusText = 'Available'; }
+                if (slot.status === 'occupied') { badgeClass = 'bg-danger bg-opacity-10 text-danger'; statusText = 'Occupied'; }
+                if (slot.status === 'reserved') { badgeClass = 'bg-warning bg-opacity-10 text-warning'; statusText = 'Reserved'; }
+                if (slot.status === 'misuse') { badgeClass = 'bg-warning bg-opacity-10 text-warning'; statusText = 'Misuse'; }
+
+                const tileHtml = `
+                    <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6 mb-3">
+                        <div class="slot-tile ${slot.status}">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h3 class="fw-bold m-0 text-white">${slot.slot_id}</h3>
+                                <div class="status-indicator"></div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="text-secondary small text-uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 1px;">${slot.size_type}</div>
+                            </div>
+
+                            ${vehicle}
+                            
+                            <div class="mt-3 pt-3 border-top border-secondary border-opacity-10 d-flex justify-content-between align-items-center">
+                                <span class="badge ${badgeClass} rounded-pill border border-opacity-10">${statusText}</span>
+                                <small class="text-secondary" style="font-size: 0.75rem;">${duration}</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                slotGrid.insertAdjacentHTML('beforeend', tileHtml);
+            });
+        }
+
+        // Update calls to renderTiles
+        // filterData() will now call renderTiles
+        // loadData() will call filterData() which in turn calls renderTiles
+
+        // Auto Load
+        loadData();
+        setInterval(loadData, 5000);
+
+    </script>
 </body>
 
 </html>

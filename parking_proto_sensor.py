@@ -5,9 +5,15 @@ import cv2
 import numpy as np
 import easyocr
 import re
+import os
+import threading
+import time
 import make_qrs # Import the QR generator module
 from flask import Flask, render_template, request, jsonify, redirect, url_for, Response
-import os
+
+# --- Project Imports ---
+from agent import ParkingAgent
+from network_manager import NetworkManager
 
 # 1. Get the absolute path of the directory the script is running from
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -19,73 +25,101 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 DB_NAME = "parking.db"
 
-# Initialize EasyOCR Reader (Load once)
-print("Loading EasyOCR Model...")
-MODEL_STORAGE_PATH = '/app/easyocr_models'
-reader = easyocr.Reader(['en'], gpu=False, model_storage_directory=MODEL_STORAGE_PATH, user_network_directory='/app/temp_user_networks')
-print("EasyOCR Model Loaded.")
+# --- AGENT INITIALIZATION ---
+# Initialize the Intelligent Agent
+print("Initializing Real-Time Parking Agent...")
+parking_agent = ParkingAgent() 
+print("Agent Initialized.")
 
-# Global Camera Variable (Lazy Init)
-camera = None
-
-class MockCamera:
+# --- SHARED CAMERA SINGLETON ---
+# --- SHARED CAMERA SINGLETON ---
+class SharedCamera:
     def __init__(self):
-        # Create a black image with text
-        self.frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(self.frame, "NO CAMERA DETECTED", (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        cv2.putText(self.frame, "Running in Docker Mode", (120, 250), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
+        # Try DSHOW first (Windows), then default
+        print("Attempting to open camera with CAP_DSHOW...")
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        if not self.cap.isOpened():
+             print("CAP_DSHOW failed. Trying default backend...")
+             self.cap = cv2.VideoCapture(0)
+             
+        self.lock = threading.Lock()
+        self.last_frame = None
+        self.is_running = True
+        
+        if not self.cap.isOpened():
+            print("CRITICAL ERROR: Camera 0 could not be opened Check drivers/permissions.")
+        else:
+            print("Camera 0 Opened Successfully.")
+        
+        # Start background reading thread
+        self.thread = threading.Thread(target=self._update_loop, daemon=True)
+        self.thread.start()
 
-    def read(self):
-        # Simulate successful read
-        return True, self.frame.copy()
-
-    def release(self):
-        pass
-
-def get_camera():
-    global camera
-    if camera is None:
-        try:
-            # 1. Attempt to open physical camera
-            # Note: CAP_DSHOW is Windows-specific. We remove it for Docker/Linux compatibility.
-            temp_cam = cv2.VideoCapture(0)
-            
-            if temp_cam is None or not temp_cam.isOpened():
-                raise Exception("Camera 0 not found")
+    def _update_loop(self):
+        failure_count = 0
+        while self.is_running:
+            if self.cap.isOpened():
+                success, frame = self.cap.read()
+                if success:
+                    with self.lock:
+                        self.last_frame = frame.copy()
+                    failure_count = 0
+                else:
+                    failure_count += 1
+                    if failure_count > 10:
+                        # print("Camera read failed repeatedly. Re-initializing...")
+                        self.cap.release()
+                        time.sleep(1)
+                        self.cap = cv2.VideoCapture(0)
+                        failure_count = 0
+            else:
+                time.sleep(1)
+                self.cap = cv2.VideoCapture(0)
                 
-            # Test reading a frame
-            ret, _ = temp_cam.read()
-            if not ret:
-                raise Exception("Camera 0 opened but returned no frame")
-                
-            camera = temp_cam
-            print("Physical Camera Initialized Successfully.")
-            
-        except Exception as e:
-            print(f"CAMERA ERROR: {e}")
-            print("Using Mock Camera Fallback.")
-            camera = MockCamera()
-            
-    return camera
+            time.sleep(0.01) # ~60 FPS cap
 
-# Global Sensor Data Store (In-memory)
-SENSOR_DATA = {
-    "left": 0,
-    "right": 0,
-    "last_updated": None
-}
+    def get_frame(self):
+        with self.lock:
+             if self.last_frame is not None:
+                 return self.last_frame.copy()
+        return None
+
+    def __del__(self):
+        self.is_running = False
+        if self.cap and self.cap.isOpened():
+            self.cap.release()
+
+# Global Camera Instance
+camera_system = None
 
 def generate_frames():
-    cam = get_camera()
+    global camera_system
+    if camera_system is None:
+        camera_system = SharedCamera()
+        
     while True:
-        success, frame = cam.read()
-        if not success:
-            break
-        else:
+        frame = camera_system.get_frame()
+        if frame is None:
+            # Send black frame if no camera
+            blank = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(blank, "NO SIGNAL", (200, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.putText(blank, "Check Server Console", (180, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+            frame = blank
+            
+        try:
             ret, buffer = cv2.imencode('.jpg', frame)
-            frame = buffer.tobytes()
+            if not ret:
+                continue
+            frame_bytes = buffer.tobytes()
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        except Exception as e:
+            print(f"Frame encoding error: {e}")
+            pass
+        
+        # Don't loop too fast if there's no camera
+        if frame is None:
+            time.sleep(0.5)
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
@@ -143,43 +177,8 @@ def init_db():
             c.executemany("INSERT INTO fastag_map (tag_id, reg_num, balance) VALUES (?, ?, ?)", fastag_data)
             print("Initialized sample FASTag data.")
 
-def find_best_slot(size):
-    """
-    Finds the best available slot based on vehicle size using 'Best Fit' logic.
-    Hierarchy:
-    - Small Vehicle: Small -> Medium -> Large
-    - Medium Vehicle: Medium -> Large
-    - Large Vehicle: Large
-    """
-    with sqlite3.connect(DB_NAME) as conn:
-        c = conn.cursor()
-        
-        # Define search order based on vehicle size
-        search_order = []
-        if size == 'small':
-            search_order = ['small', 'medium', 'large']
-        elif size == 'medium':
-            search_order = ['medium', 'large']
-        elif size == 'large':
-            search_order = ['large']
-            
-        for check_size in search_order:
-            c.execute("SELECT slot_id FROM slots WHERE size_type = ? AND status = 'free' ORDER BY slot_id ASC LIMIT 1", (check_size,))
-            result = c.fetchone()
-            if result:
-                return result[0]
-                
-        return None
 
-def log_action(reg_num, slot_id, action):
-    with sqlite3.connect(DB_NAME) as conn:
-        c = conn.cursor()
-        timestamp = datetime.datetime.now().isoformat()
-        c.execute("INSERT INTO logs (reg_num, slot_id, action, timestamp) VALUES (?, ?, ?, ?)", 
-                  (reg_num, slot_id, action, timestamp))
-        conn.commit()
-
-# --- Routes ---
+# --- Routes Refactored to use Agent ---
 
 @app.route('/')
 def index():
@@ -202,8 +201,11 @@ def slots_dashboard():
         occupied = sum(1 for s in slots if s['status'] == 'occupied')
         utilization = round((occupied / total) * 100, 1) if total > 0 else 0
         
-    # --- CHANGED: Render index_sensor.html instead of index.html ---
     return render_template('index_sensor.html', utilization=utilization)
+
+@app.route('/dashboard')
+def dashboard_view():
+    return render_template('dashboard.html')
 
 @app.route('/status')
 def allotment_status():
@@ -218,274 +220,105 @@ def allotment_status():
 def entry():
     try:
         data = request.json
-        reg_num = data.get('reg_num')
-        size = data.get('vehicle_size', 'medium') # Default to medium if not provided
         
-        if not reg_num:
-            return jsonify({"error": "Registration number required"}), 400
+        # 1. PERCEIVE: Agent receives data
+        percepts = {
+            'reg_num': data.get('reg_num'),
+            'vehicle_size': data.get('vehicle_size', 'medium')
+        }
+        
+        # 2. DECIDE: Agent makes a decision
+        actions = parking_agent.decide(percepts)
+        
+        # 3. ACT: System executes Agent's chosen action
+        response = None
+        for action in actions:
+            result = parking_agent.act(action)
+            
+            if action['type'] == 'GRANT_ACCESS':
+                response = jsonify({"message": "Entry successful", "assigned_slot": result['assigned_slot'], "size": percepts['vehicle_size']})
+            elif action['type'] == 'DENY_ACCESS':
+                return jsonify({"error": result['message']}), 400
+                
+        if response:
+            return response
+        else:
+            return jsonify({"error": "No action taken by Agent"}), 400
 
-        # Validate Format: TTNNTTNNNN (e.g., MH02AB1234)
-        if not re.match(r"^[A-Z]{2}\d{2}[A-Z]{2}\d{4}$", reg_num):
-            return jsonify({"error": "Invalid format. Use TTNNTTNNNN (e.g., MH02AB1234)"}), 400
-        
-        # Check if already parked
-        with sqlite3.connect(DB_NAME) as conn:
-            c = conn.cursor()
-            c.execute("SELECT slot_id, status FROM slots WHERE reg_num = ?", (reg_num,))
-            existing = c.fetchone()
-            if existing:
-                if existing[1] == 'reserved':
-                    # Confirming a reservation
-                    slot_id = existing[0]
-                    c.execute("UPDATE slots SET status = 'occupied', entry_time = ?, is_verified = 0 WHERE slot_id = ?", 
-                              (datetime.datetime.now().isoformat(), slot_id))
-                    conn.commit()
-                    log_action(reg_num, slot_id, "ENTRY (RESERVED)")
-                    return jsonify({"message": "Reservation Confirmed. Entry successful", "assigned_slot": slot_id, "size": size})
-                else:
-                    return jsonify({"error": "Vehicle already parked"}), 400
-
-        # Use manually selected size
-        slot_id = find_best_slot(size)
-        
-        if not slot_id:
-            return jsonify({"error": "No available slots for this vehicle size", "size_detected": size}), 404
-        
-        with sqlite3.connect(DB_NAME) as conn:
-            c = conn.cursor()
-            c.execute("UPDATE slots SET status = 'occupied', reg_num = ?, entry_time = ?, is_verified = 0 WHERE slot_id = ?", 
-                      (reg_num, datetime.datetime.now().isoformat(), slot_id))
-            conn.commit()
-        
-        log_action(reg_num, slot_id, "ENTRY")
-        return jsonify({"message": "Entry successful", "assigned_slot": slot_id, "size": size})
     except Exception as e:
         print(f"ENTRY ERROR: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
 
 @app.route('/exit', methods=['POST'])
 def exit_vehicle():
+    # Currently simplest implementation - direct DB update. 
+    # Can be moved to Agent.act('RELEASE_SLOT') later.
     try:
         data = request.json
         reg_num = data.get('reg_num')
-        
-        if not reg_num:
-            return jsonify({"error": "Registration number required"}), 400
+        if not reg_num: return jsonify({"error": "Registration number required"}), 400
             
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
             c.execute("SELECT slot_id, entry_time FROM slots WHERE reg_num = ?", (reg_num,))
             row = c.fetchone()
-            
-            if not row:
-                return jsonify({"error": "Vehicle not found"}), 404
-                
+            if not row: return jsonify({"error": "Vehicle not found"}), 404
             slot_id, entry_time = row
             
-            # Calculate duration (mock)
+            duration_sec = 0
             if entry_time:
                 entry_dt = datetime.datetime.fromisoformat(entry_time)
                 duration_sec = (datetime.datetime.now() - entry_dt).total_seconds()
-            else:
-                duration_sec = 0
             
             c.execute("UPDATE slots SET status = 'free', reg_num = NULL, entry_time = NULL, is_verified = 0 WHERE slot_id = ?", (slot_id,))
             conn.commit()
             
-        log_action(reg_num, slot_id, "EXIT")
         return jsonify({"message": "Exit successful", "freed_slot": slot_id, "duration_seconds": int(duration_sec)})
     except Exception as e:
-        print(f"EXIT ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
-
-@app.route('/reserve', methods=['POST'])
-def reserve_slot():
-    data = request.json
-    reg_num = data.get('reg_num')
-    size = data.get('vehicle_size', 'medium')
-    
-    if not reg_num:
-        return jsonify({"error": "Registration number required"}), 400
-        
-    # Check if already parked or reserved
-    with sqlite3.connect(DB_NAME) as conn:
-        c = conn.cursor()
-        c.execute("SELECT slot_id FROM slots WHERE reg_num = ?", (reg_num,))
-        if c.fetchone():
-            return jsonify({"error": "Vehicle already has a slot"}), 400
-
-    slot_id = find_best_slot(size)
-    if not slot_id:
-        return jsonify({"error": "No available slots to reserve"}), 404
-        
-    with sqlite3.connect(DB_NAME) as conn:
-        c = conn.cursor()
-        c.execute("UPDATE slots SET status = 'reserved', reg_num = ? WHERE slot_id = ?", (reg_num, slot_id))
-        conn.commit()
-        
-    log_action(reg_num, slot_id, "RESERVE")
-    return jsonify({"message": "Slot Reserved Successfully", "reserved_slot": slot_id})
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/reset', methods=['POST'])
 def reset_parking():
     try:
-        with sqlite3.connect(DB_NAME) as conn:
-            c = conn.cursor()
-            c.execute("UPDATE slots SET status = 'free', reg_num = NULL, entry_time = NULL, is_verified = 0")
-            conn.commit()
-            
-        log_action("ADMIN", "ALL", "RESET")
-        return jsonify({"message": "All slots released successfully"})
+        # Directly create the action for the agent
+        action = {'type': 'RESET_ALL'}
+        
+        # Agent acts on the command
+        result = parking_agent.act(action)
+        
+        if result and result.get('status') == 'success':
+             return jsonify(result)
+        else:
+             return jsonify({"error": "Reset failed", "details": result.get('message', '')}), 500
+
     except Exception as e:
         print(f"RESET ERROR: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
-
-@app.route('/admin/update_url', methods=['POST'])
-def update_url():
-    """
-    Dynamically update the SERVER_URL and regenerate QR codes.
-    Useful for temporary tunneling (ngrok/cloudflare) without restarting.
-    """
-    try:
-        new_url = request.json.get('server_url')
-        if not new_url:
-            return jsonify({"error": "URL is required"}), 400
-            
-        # Update Environment Variable (for this process)
-        os.environ['SERVER_URL'] = new_url
-        
-        # Regenerate QR Codes
-        print(f"Updating SERVER_URL to: {new_url}")
-        print("Regenerating QR Codes...")
-        make_qrs.generate_qrs()
-        
-        return jsonify({"message": f"URL Updated to {new_url}. QR Codes Regenerated."})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @app.route('/anpr', methods=['POST'])
 def anpr():
-    print("ANPR Request Received")
+    print("ANPR Request Received (Agent Perception)")
     try:
-        # Capture frame from camera
-        cam = get_camera()
-        success, frame = cam.read()
-        if not success:
-            return jsonify({"error": "Failed to capture image from camera"}), 500
-            
-        img = frame
-        print("Image captured successfully. Processing...")
-
-        # 1. Preprocessing
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        bfilter = cv2.bilateralFilter(gray, 11, 17, 17) # Noise removal
+        global camera_system
+        if camera_system is None:
+             camera_system = SharedCamera()
+             
+        # Capture input (Use SHARED CAMERA resource)
+        frame = camera_system.get_frame()
         
-        # Adaptive Thresholding for better contrast
-        thresh = cv2.adaptiveThreshold(bfilter, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-        edged = cv2.Canny(bfilter, 30, 200) # Edge detection
-
-        # 2. Plate Localization
-        cnts_result = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        contours = cnts_result[0] if len(cnts_result) == 2 else cnts_result[1]
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
+        if frame is None:
+            return jsonify({"error": "Failed to capture image (Camera busy or off)"}), 500
+            
+        # 1. PERCEIVE: Send Image to Agent
+        perception_result = parking_agent.perceive('image', frame)
         
-        location = None
-        for contour in contours:
-            approx = cv2.approxPolyDP(contour, 10, True)
+        if 'error' in perception_result:
+            return jsonify(perception_result), 400
             
-            # Check for rectangular shape (4 points)
-            if len(approx) == 4:
-                # Aspect Ratio Filter (Plates are wider than tall)
-                (x, y, w, h) = cv2.boundingRect(approx)
-                ar = w / float(h)
-                if ar >= 2.0 and ar <= 5.0: # Typical license plate AR
-                    location = approx
-                    break
-        
-        if location is not None:
-            mask = np.zeros(gray.shape, np.uint8)
-            new_image = cv2.drawContours(mask, [location], 0, 255, -1)
-            new_image = cv2.bitwise_and(img, img, mask=mask)
-            (x,y) = np.where(mask==255)
-            (x1, y1) = (np.min(x), np.min(y))
-            (x2, y2) = (np.max(x), np.max(y))
-            cropped_image = gray[x1:x2+1, y1:y2+1]
-            
-            # Resize for better OCR
-            cropped_image = cv2.resize(cropped_image, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-            
-            # Use allowlist for alphanumeric only
-            result = reader.readtext(cropped_image, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
-        else:
-            # Fallback: Try OCR on the whole image with thresholding
-            result = reader.readtext(thresh, allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
-            
-        print(f"OCR Result: {result}")
-            
-        if not result:
-            return jsonify({"error": "No text detected"}), 400
-            
-        detected_text = ""
-        # Sort results by confidence
-        result.sort(key=lambda x: x[2], reverse=True)
-        
-        for (bbox, text, prob) in result:
-            clean = ''.join(e for e in text if e.isalnum()).upper()
-            if len(clean) >= 6: # Minimum length for a plate
-                detected_text = clean
-                break
-        
-        if not detected_text and len(result) > 0:
-             detected_text = ''.join(e for e in result[0][1] if e.isalnum()).upper()
-
-        def correct_ocr_errors(text):
-            # Standard Indian Plate: TTNNTTNNNN (e.g., MH02AB1234)
-            # Length usually 10, sometimes 9 or 11
-            
-            if text.startswith("IND") and len(text) > 10:
-                text = text[3:]
-            
-            # Basic character replacements
-            chars = list(text)
-            
-            # Mapping for letters (first 2 chars, middle 2 chars)
-            letter_map = {'0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B', '4': 'A', '6': 'G'}
-            # Mapping for numbers (next 2 chars, last 4 chars)
-            number_map = {'O': '0', 'Q': '0', 'I': '1', 'Z': '2', 'S': '5', 'B': '8', 'A': '4', 'G': '6', 'T': '1'}
-            
-            # Heuristic correction based on position (assuming 10 chars)
-            if len(chars) == 10:
-                # Pos 0,1: Letters
-                if chars[0] in letter_map: chars[0] = letter_map[chars[0]]
-                if chars[1] in letter_map: chars[1] = letter_map[chars[1]]
-                
-                # Pos 2,3: Numbers
-                if chars[2] in number_map: chars[2] = number_map[chars[2]]
-                if chars[3] in number_map: chars[3] = number_map[chars[3]]
-                
-                # Pos 4,5: Letters
-                if chars[4] in letter_map: chars[4] = letter_map[chars[4]]
-                if chars[5] in letter_map: chars[5] = letter_map[chars[5]]
-                
-                # Pos 6,7,8,9: Numbers
-                for i in range(6, 10):
-                    if chars[i] in number_map: chars[i] = number_map[chars[i]]
-                    
-            return "".join(chars)
-
-        detected_text = correct_ocr_errors(detected_text)
-        return jsonify({"reg_num": detected_text, "raw_output": str(result)})
+        return jsonify(perception_result)
 
     except Exception as e:
         print(f"ANPR CRASH: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Internal Error: {str(e)}"}), 500
 
 @app.route('/verify_ui')
@@ -493,137 +326,168 @@ def anpr():
 def verify_ui(slot_id=None):
     if not slot_id:
         slot_id = request.args.get('slot_id')
-    
-    if not slot_id:
-        return "Error: No slot_id provided", 400
-        
     return render_template('verify.html', slot_id=slot_id)
 
 @app.route('/process_verification', methods=['POST'])
 def process_verification():
+    # Verification is effectively a sensor check confirming location
     reg_num = request.form.get('reg_num')
     slot_id = request.form.get('slot_id')
     
-    if not reg_num or not slot_id:
-        return jsonify({"error": "Missing data"}), 400
-        
+    # Process via direct DB for now, but conceptually this is Agent matching 
+    # expected state (Assigned Slot) vs Perceived State (QR Scan Location)
+    reg_num = reg_num.strip().upper().replace(" ", "")
+    
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
-        
-        # 1. Find the slot actually assigned to this vehicle
         c.execute("SELECT slot_id FROM slots WHERE reg_num = ?", (reg_num,))
         assigned_row = c.fetchone()
         
         if not assigned_row:
-            return jsonify({"success": False, "message": "Vehicle not found in system. Please enter valid registration."})
-            
+             return jsonify({"success": False, "message": "Vehicle not found."})
+             
         assigned_slot = assigned_row[0]
-        
-        # 2. Compare assigned slot with scanned slot
         if assigned_slot != slot_id:
-            # --- WRONG PARKING TRIGGER ---
-            # Mark the SCANNED slot as 'misuse' and log the offender
-            c.execute("UPDATE slots SET status = 'misuse', reg_num = ?, is_verified = 0 WHERE slot_id = ?", (reg_num, slot_id))
+            # WRONG SLOT - Misuse Detected
+            # UPDATE DB IMMEDIATELY to trigger Server Alert
+            # Save reg_num so we know WHO caused it
+            c.execute("UPDATE slots SET status = 'misuse', reg_num = ? WHERE slot_id = ?", (reg_num, slot_id))
             conn.commit()
             
             return jsonify({
                 "success": False, 
-                "alert": True,
-                "message": f"⚠️ WRONG SLOT! You are assigned to {assigned_slot}. You have scanned {slot_id}. Please move immediately!",
-                "redirect_slot": assigned_slot
+                "status": "misuse",
+                "assigned_slot": assigned_slot,
+                "current_slot": slot_id,
+                "message": f"Vehicle Assigned to {assigned_slot} but detected at {slot_id}."
             })
             
-        # 3. Correct Slot
-        c.execute("UPDATE slots SET is_verified = 1 WHERE slot_id = ?", (slot_id,))
+        c.execute("UPDATE slots SET is_verified = 1, status = 'occupied' WHERE slot_id = ?", (slot_id,))
         conn.commit()
-        return jsonify({"success": True, "message": "Verification Successful! Slot Verified."})
+        return jsonify({"success": True, "status": "verified", "message": "Verified!"})
+
+@app.route('/resolve_misuse', methods=['POST'])
+def resolve_misuse():
+    try:
+        data = request.json
+        slot_id = data.get('slot_id') # The WRONG slot being used
+        reg_num = data.get('reg_num')
+        decision = data.get('decision') # 'accept' or 'reject'
+        
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            
+            # Find the ORIGINALLY assigned slot
+            c.execute("SELECT slot_id FROM slots WHERE reg_num = ?", (reg_num,))
+            row = c.fetchone()
+            # If not found, that's okay, maybe cleared already
+            assigned_slot = row[0] if row else None
+            
+            if decision == 'accept':
+                # 1. Clear the Old Slot(s) - Wipe ALL instances of this car
+                c.execute("UPDATE slots SET status = 'free', reg_num = NULL, entry_time = NULL, is_verified = 0 WHERE reg_num = ?", (reg_num,))
+                
+                # 2. Occupy the New Slot
+                c.execute("UPDATE slots SET status = 'occupied', reg_num = ?, entry_time = ?, is_verified = 1 WHERE slot_id = ?", 
+                          (reg_num, datetime.datetime.now().isoformat(), slot_id))
+                msg = f"Re-assigned to {slot_id}"
+                
+            elif decision == 'resolved':
+                # Vehicle moved away. Slot is free.
+                c.execute("UPDATE slots SET status = 'free', reg_num = NULL, entry_time = NULL, is_verified = 0 WHERE slot_id = ?", (slot_id,))
+                msg = "Incident Resolved. Slot Freed."
+
+            else: # reject
+                # Mark current slot as MISUSE (Visual Alert) and keep original assigned
+                c.execute("UPDATE slots SET status = 'misuse', reg_num = ?, is_verified = 0 WHERE slot_id = ?", (reg_num, slot_id))
+                msg = "Misuse Alert Triggered"
+                
+            conn.commit()
+            return jsonify({"success": True, "message": msg})
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/nfc_scan', methods=['POST'])
 def nfc_scan():
     data = request.json
     tag_id = data.get('tag_id')
     
-    if not tag_id:
-        return jsonify({"error": "Tag ID required"}), 400
-        
+    # 1. PERCEIVE: NFC Tap
+    # 2. DECIDE: Agent checks balance/auth
+    # For now, simplistic agent logic integration:
+    
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
         c.execute("SELECT reg_num, balance FROM fastag_map WHERE tag_id = ?", (tag_id,))
         row = c.fetchone()
-        
         if row:
-            reg_num, balance = row
-            return jsonify({
-                "status": "success",
-                "tag_id": tag_id,
-                "reg_num": reg_num,
-                "balance": balance,
-                "message": "FASTag Scanned Successfully"
-            })
-        else:
-            return jsonify({"error": "Unknown Tag ID"}), 404
-
-@app.route('/update_sensors', methods=['POST'])
-def update_sensors():
-    """
-    Endpoint for Raspberry Pi to send sensor data.
-    Expected JSON: {"left": 50, "right": 50}
-    """
-    global SENSOR_DATA
-    data = request.json
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
-        
-    SENSOR_DATA["left"] = data.get("left", 0)
-    SENSOR_DATA["right"] = data.get("right", 0)
-    SENSOR_DATA["last_updated"] = datetime.datetime.now().isoformat()
-    
-    return jsonify({"message": "Sensor data updated", "data": SENSOR_DATA})
+            return jsonify({"status": "success", "reg_num": row[0], "balance": row[1]})
+        return jsonify({"error": "Unknown Tag"}), 404
 
 @app.route('/get_sensors', methods=['GET'])
 def get_sensors():
-    """
-    Endpoint for Frontend to poll sensor data.
-    Also checks for any 'misuse' slots to trigger dashboard alerts.
-    """
-    # Check for misuse
+    # Polling the Agent's state or Database
+    # Here we can return database-driven alerts
     alerts = []
-    try:
-        with sqlite3.connect(DB_NAME) as conn:
-            c = conn.cursor()
-            c.execute("SELECT slot_id, reg_num FROM slots WHERE status = 'misuse'")
-            misuse_slots = c.fetchall()
-            for slot in misuse_slots:
-                alerts.append({"slot_id": slot[0], "reg_num": slot[1]})
-    except Exception as e:
-        print(f"Error checking alerts: {e}")
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("SELECT slot_id, reg_num FROM slots WHERE status = 'misuse'")
+        for r in c.fetchall():
+             alerts.append({"slot_id": r[0], "reg_num": r[1]})
+             
+    return jsonify({"alerts": alerts})
 
-    response_data = SENSOR_DATA.copy()
-    response_data["alerts"] = alerts
-    return jsonify(response_data)
-
-@app.route('/surveillance_check', methods=['GET'])
-def surveillance():
+@app.route('/api/slots', methods=['GET'])
+def api_slots():
     """
-    Simulates a surveillance check. 
-    In a real system, this would compare camera feed vs DB.
-    Here, we just return current status and maybe simulate a mismatch.
+    Returns full slot list for the frontend dashboard.
+    """
+    with sqlite3.connect(DB_NAME) as conn:
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM slots ORDER BY slot_id")
+        rows = c.fetchall()
+        
+        # Convert to list of dicts
+        slots = [dict(row) for row in rows]
+        
+    return jsonify(slots)
+
+@app.route('/api/slot_status/<slot_id>', methods=['GET'])
+def get_slot_status(slot_id):
+    """
+    Lightweight endpoint for mobile polling during verification.
     """
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
-        c.execute("SELECT slot_id, status, reg_num FROM slots")
-        slots = c.fetchall()
-        
-    # Simulate a random anomaly
-    alerts = []
-    if random.random() < 0.1: # 10% chance of anomaly
-        alerts.append({"slot": "S005", "issue": "Occupied but no entry log"})
-        
-    return jsonify({"status": "active", "alerts": alerts, "checked_slots": len(slots)})
+        c.execute("SELECT status, reg_num FROM slots WHERE slot_id = ?", (slot_id,))
+        row = c.fetchone()
+        if row:
+            return jsonify({"status": row[0], "reg_num": row[1]})
+        return jsonify({"error": "Slot not found"}), 404
 
+
+# --- STARTUP ORCHESTRATION ---
 if __name__ == '__main__':
+    # 1. Initialize Database
     init_db()
-    print("Generating new QR codes...")
-    make_qrs.generate_qrs() # Generate QRs on startup
-    # Run on 0.0.0.0 to be accessible, debug=True for dev
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded =True)
+    
+    # 2. Network Auto-Configuration
+    # This detects Local IP and Public Tunnel URL
+    print("Configuring Network...")
+    local_ip, public_url = NetworkManager.initialize()
+    print(f"Network Configured. Local: {local_ip}, Public: {public_url}")
+    
+    # 3. Generate QR Codes
+    # Now uses the public_url we just configured
+    print("Generating QR Codes...")
+    make_qrs.generate_qrs()
+    
+    # Pre-warm camera system (Runs in separate thread)
+    camera_system = SharedCamera()
+    
+    # 4. Start Server
+    # Threaded=True allow for concurrent requests (video feed + api)
+    # use_reloader=False prevents the app from starting twice in debug mode
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True, use_reloader=False)

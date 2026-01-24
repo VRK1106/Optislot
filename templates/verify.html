@@ -3,95 +3,307 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verify Parking Slot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Verify Slot</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-color: #0f1218;
+            --card-bg: #1a1f2b;
+            --input-bg: #232936;
+            --text-primary: #ffffff;
+            --text-secondary: #9ca3af;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --accent-amber: #f59e0b;
+        }
+
         body {
-            background-color: #f8f9fa;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            transition: background-color 0.5s ease;
+            padding: 1rem;
         }
 
-        .card {
-            border: none;
-            border-radius: 15px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            max-width: 400px;
+        .verify-card {
+            background: rgba(26, 31, 43, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 2rem;
             width: 100%;
-            transition: box-shadow 0.5s ease;
+            max-width: 420px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slot-badge {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+            padding: 8px 16px;
+            border-radius: 12px;
+            display: inline-block;
+            font-weight: 700;
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-control-custom {
+            background: var(--input-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 1rem;
+            border-radius: 16px;
+            font-size: 1.1rem;
+            text-align: center;
+            letter-spacing: 2px;
+            font-weight: 600;
+            text-transform: uppercase;
+            width: 100%;
+            margin-bottom: 1.5rem;
+            transition: all 0.2s;
+        }
+
+        .form-control-custom:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            background: #2a3241;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
         }
 
         .btn-verify {
-            background-color: #28a745;
+            background: var(--accent-green);
             color: white;
-            border-radius: 25px;
-            padding: 10px 20px;
-            font-weight: bold;
+            border: none;
+            padding: 1rem;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            width: 100%;
+            transition: transform 0.1s;
         }
 
-        .btn-verify:hover {
-            background-color: #218838;
+        .btn-verify:active {
+            transform: scale(0.98);
+        }
+
+        /* Status States */
+        .status-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            from {
+                transform: scale(0);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        /* Misuse Modal / State */
+        .misuse-alert {
+            display: none;
+            text-align: center;
+        }
+
+        .btn-option {
+            padding: 0.8rem;
+            border-radius: 12px;
+            font-weight: 600;
+            width: 100%;
+            margin-bottom: 0.8rem;
+        }
+
+        .btn-accept {
+            background: var(--accent-blue);
             color: white;
+            border: none;
+        }
+
+        .btn-reject {
+            background: transparent;
+            border: 1px solid var(--accent-red);
+            color: var(--accent-red);
         }
     </style>
 </head>
 
 <body>
-    <div class="card p-4">
-        <h3 class="text-center mb-4">Verify Parking</h3>
-        <p class="text-center text-muted">Slot ID: <strong>{{ slot_id }}</strong></p>
 
-        <form id="verifyForm">
-            <input type="hidden" name="slot_id" value="{{ slot_id }}">
-            <div class="mb-3">
-                <label for="reg_num" class="form-label">Vehicle Registration Number</label>
-                <input type="text" class="form-control" id="reg_num" name="reg_num" placeholder="e.g., MH02AB1234"
-                    required>
+    <div class="verify-card" id="mainCard">
+        <div class="text-center">
+            <div class="slot-badge">SLOT: {{ slot_id }}</div>
+
+            <h3 class="fw-bold mb-4">Verify Vehicle</h3>
+
+            <form id="verifyForm">
+                <input type="hidden" id="slotId" value="{{ slot_id }}">
+                <div class="mb-2">
+                    <input type="text" class="form-control-custom" id="reg_num" placeholder="ENTER REG NO"
+                        autocomplete="off" required>
+                </div>
+                <button type="submit" class="btn-verify">
+                    VERIFY NOW <i class="fas fa-check-circle ms-2"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Success State -->
+    <div class="verify-card text-center" id="successCard" style="display: none;">
+        <div class="status-icon text-success">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <h3 class="fw-bold text-white mb-2">Verified!</h3>
+        <p class="text-secondary">Vehicle confirmed at Slot {{ slot_id }}</p>
+        <button class="btn btn-outline-light btn-sm rounded-pill mt-3" onclick="window.close()">Close Window</button>
+    </div>
+
+    <!-- Misuse State -->
+    <div class="verify-card" id="misuseCard" style="display: none;">
+        <div class="text-center">
+            <div class="status-icon text-warning">
+                <i class="fas fa-exclamation-triangle"></i>
             </div>
-            <div class="d-grid">
-                <button type="submit" class="btn btn-verify">Verify Now</button>
+            <h4 class="fw-bold text-white mb-2">Misuse Detected</h4>
+            <p class="text-secondary small mb-4">
+                Vehicle <span class="text-white fw-bold" id="misuseReg">--</span> is assigned to
+                <span class="text-white fw-bold" id="assignedSlot">--</span> but was found here.
+            </p>
+
+            <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger small fw-bold">
+                <i class="fas fa-hand-paper me-2"></i> ACTION REQUIRED AT CONTROL CENTER
             </div>
-        </form>
-        <div id="message" class="mt-3 text-center"></div>
+
+            <p class="text-secondary small">
+                Please move vehicle to the assigned slot or wait for Admin authorization.
+            </p>
+
+            <button class="btn btn-outline-secondary w-100 py-2 rounded-3 fw-bold mt-2" onclick="window.close()">
+                Close
+            </button>
+        </div>
     </div>
 
     <script>
-        document.getElementById('verifyForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-            const formData = new FormData(this);
+        function attemptClose() {
+            // Attempt to close the window using multiple methods
+            setTimeout(() => {
+                // Method 1: Standard Close
+                window.close();
 
-            fetch('/process_verification', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    const msgDiv = document.getElementById('message');
-                    if (data.success) {
-                        msgDiv.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
-                        setTimeout(() => {
-                            window.close(); // Attempt to close window
-                            msgDiv.innerHTML += '<p>You can close this tab.</p>';
-                        }, 2000);
-                    } else {
-                        msgDiv.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
-                        if (data.alert) {
-                            // Turn screen red on alert
-                            document.body.style.backgroundColor = '#ef4444';
-                            document.querySelector('.card').style.boxShadow = '0 0 30px rgba(0,0,0,0.5)';
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    document.getElementById('message').innerHTML = `<div class="alert alert-danger">An error occurred.</div>`;
-                });
+                // Method 2: Hack for some browsers
+                window.open('', '_self', '');
+                window.close();
+
+                // Method 3: Fallback - Redirect to a blank page so they are "out" of the system
+                // This guarantees they don't stay on our site if close fails.
+                setTimeout(() => {
+                    window.location.href = "about:blank";
+                }, 500);
+            }, 2000);
+        }
+
+        const slotId = document.getElementById('slotId').value;
+        const form = document.getElementById('verifyForm');
+        let currentReg = '';
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = form.querySelector('button');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+            btn.disabled = true;
+
+            currentReg = document.getElementById('reg_num').value.toUpperCase();
+
+            const formData = new FormData();
+            formData.append('reg_num', currentReg);
+            formData.append('slot_id', slotId);
+
+            try {
+                const res = await fetch('/process_verification', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.status === 'verified') {
+                    showCard('successCard');
+                    attemptClose(); // Auto-Close on Success
+                } else if (data.status === 'misuse') {
+                    document.getElementById('misuseReg').innerText = currentReg;
+                    document.getElementById('assignedSlot').innerText = data.assigned_slot;
+                    showCard('misuseCard');
+                    startPollingForAdminDecision(); // START POLLING
+                } else {
+                    alert(data.message || 'Verification Failed');
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                alert("Server Error");
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
         });
+
+        // No client-side resolve buttons anymore.
+        // We poll the server to see if Admin fixed it.
+        let hasPolled = false;
+
+        function startPollingForAdminDecision() {
+            if (hasPolled) return;
+            hasPolled = true;
+
+            const poller = setInterval(async () => {
+                if (document.getElementById('misuseCard').style.display === 'none') {
+                    clearInterval(poller); return;
+                }
+
+                try {
+                    const res = await fetch(`/api/slot_status/${slotId}`);
+                    const data = await res.json();
+
+                    // Case 1: Admin Authorized (Status -> occupied, Reg -> Matches)
+                    if (data.status === 'occupied' && (data.reg_num === currentReg || !data.reg_num)) {
+                        clearInterval(poller);
+                        showCard('successCard'); // Show Green Check
+                        document.querySelector('#successCard h3').innerText = "Authorized!";
+                        document.querySelector('#successCard p').innerText = "Admin approved location.";
+                        attemptClose();
+                    }
+
+                    // Case 2: Admin Resolved/Cleared (Status -> free) 
+                    // If car is no longer 'misuse' and not 'occupied' by us, process is done.
+                    else if (data.status !== 'misuse') {
+                        clearInterval(poller);
+                        alert("Process Updated by Admin.");
+                        attemptClose();
+                    }
+
+                } catch (e) { console.error("Poll error", e); }
+            }, 1000);
+        }
+
+        function showCard(id) {
+            document.querySelectorAll('.verify-card').forEach(c => c.style.display = 'none');
+            document.getElementById(id).style.display = 'block';
+        }
     </script>
+
 </body>
 
 </html>
