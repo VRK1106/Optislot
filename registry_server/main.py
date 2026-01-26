@@ -10,37 +10,28 @@ from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional
+from contextlib import asynccontextmanager
 import sqlite3
 import os
 import secrets
 from datetime import datetime
-from contextlib import contextmanager
-
-app = FastAPI(
-    title="Smart Parking Registry",
-    description="Dynamic URL Registry for Permanent QR Codes",
-    version="1.0.0"
-)
 
 # Database setup
 DB_PATH = os.getenv("DATABASE_PATH", "registry.db")
 API_KEY = os.getenv("REGISTRY_API_KEY", "dev-key-change-in-production")
 
 
-@contextmanager
-def get_db():
-    """Database connection context manager."""
+def get_db_connection():
+    """Get database connection."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-    finally:
-        conn.close()
+    return conn
 
 
 def init_db():
     """Initialize the database tables."""
-    with get_db() as conn:
+    conn = get_db_connection()
+    try:
         c = conn.cursor()
         c.execute('''
             CREATE TABLE IF NOT EXISTS units (
@@ -52,12 +43,23 @@ def init_db():
             )
         ''')
         conn.commit()
+    finally:
+        conn.close()
 
 
-# Initialize DB on startup
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup/shutdown."""
     init_db()
+    yield
+
+
+app = FastAPI(
+    title="Smart Parking Registry",
+    description="Dynamic URL Registry for Permanent QR Codes",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 
 # --- Models ---
@@ -103,20 +105,16 @@ async def root():
 
 @app.post("/register", response_model=RegisterResponse)
 async def register_unit(request: RegisterRequest, api_key: str = Depends(verify_api_key)):
-    """
-    Register or update a parking unit's current URL.
-    Called by the local parking system on startup.
-    """
-    with get_db() as conn:
+    """Register or update a parking unit's current URL."""
+    conn = get_db_connection()
+    try:
         c = conn.cursor()
         now = datetime.utcnow().isoformat()
         
-        # Check if unit exists
         c.execute("SELECT unit_id FROM units WHERE unit_id = ?", (request.unit_id,))
         exists = c.fetchone()
         
         if exists:
-            # Update existing unit
             c.execute("""
                 UPDATE units 
                 SET current_url = ?, unit_name = ?, last_updated = ?
@@ -124,7 +122,6 @@ async def register_unit(request: RegisterRequest, api_key: str = Depends(verify_
             """, (request.current_url, request.unit_name, now, request.unit_id))
             message = "Unit URL updated successfully"
         else:
-            # Insert new unit
             c.execute("""
                 INSERT INTO units (unit_id, current_url, unit_name, last_updated, created_at)
                 VALUES (?, ?, ?, ?, ?)
@@ -132,9 +129,9 @@ async def register_unit(request: RegisterRequest, api_key: str = Depends(verify_
             message = "Unit registered successfully"
         
         conn.commit()
+    finally:
+        conn.close()
     
-    # Get the base URL for QR codes (this server's URL)
-    # In production, this would be the Render URL
     qr_base_url = os.getenv("REGISTRY_PUBLIC_URL", "http://localhost:8000")
     
     return RegisterResponse(
@@ -147,11 +144,9 @@ async def register_unit(request: RegisterRequest, api_key: str = Depends(verify_
 
 @app.get("/r/{unit_id}/{slot_id}")
 async def redirect_to_slot(unit_id: str, slot_id: str):
-    """
-    Redirect to the unit's current URL with the slot ID.
-    This is what QR codes point to.
-    """
-    with get_db() as conn:
+    """Redirect to the unit's current URL with the slot ID."""
+    conn = get_db_connection()
+    try:
         c = conn.cursor()
         c.execute("SELECT current_url FROM units WHERE unit_id = ?", (unit_id,))
         row = c.fetchone()
@@ -163,8 +158,9 @@ async def redirect_to_slot(unit_id: str, slot_id: str):
             )
         
         current_url = row["current_url"]
+    finally:
+        conn.close()
     
-    # Redirect to the verification page
     redirect_url = f"{current_url}/verify_ui?slot_id={slot_id}"
     return RedirectResponse(url=redirect_url, status_code=302)
 
@@ -172,7 +168,8 @@ async def redirect_to_slot(unit_id: str, slot_id: str):
 @app.get("/unit/{unit_id}", response_model=UnitInfo)
 async def get_unit_info(unit_id: str):
     """Get information about a registered unit."""
-    with get_db() as conn:
+    conn = get_db_connection()
+    try:
         c = conn.cursor()
         c.execute("SELECT * FROM units WHERE unit_id = ?", (unit_id,))
         row = c.fetchone()
@@ -186,12 +183,15 @@ async def get_unit_info(unit_id: str):
             unit_name=row["unit_name"],
             last_updated=row["last_updated"]
         )
+    finally:
+        conn.close()
 
 
 @app.get("/units")
 async def list_units(api_key: str = Depends(verify_api_key)):
     """List all registered units (admin endpoint)."""
-    with get_db() as conn:
+    conn = get_db_connection()
+    try:
         c = conn.cursor()
         c.execute("SELECT unit_id, current_url, unit_name, last_updated FROM units")
         rows = c.fetchall()
@@ -200,9 +200,10 @@ async def list_units(api_key: str = Depends(verify_api_key)):
             "count": len(rows),
             "units": [dict(row) for row in rows]
         }
+    finally:
+        conn.close()
 
 
-# --- Generate API Key (utility) ---
 @app.get("/generate-key")
 async def generate_api_key():
     """Generate a secure API key (for initial setup)."""
