@@ -398,9 +398,9 @@ def resolve_misuse():
                 msg = "Incident Resolved. Slot Freed."
 
             else: # reject
-                # Mark current slot as MISUSE (Visual Alert) and keep original assigned
-                c.execute("UPDATE slots SET status = 'misuse', reg_num = ?, is_verified = 0 WHERE slot_id = ?", (reg_num, slot_id))
-                msg = "Misuse Alert Triggered"
+                # Mark current slot as REJECTED so mobile can detect and show message
+                c.execute("UPDATE slots SET status = 'rejected', reg_num = ?, is_verified = 0 WHERE slot_id = ?", (reg_num, slot_id))
+                msg = "Access Rejected - Vehicle must move to assigned slot"
                 
             conn.commit()
             return jsonify({"success": True, "message": msg})
@@ -474,20 +474,39 @@ if __name__ == '__main__':
     init_db()
     
     # 2. Network Auto-Configuration
-    # This detects Local IP and Public Tunnel URL
+    # This detects Local IP, Public Tunnel URL, AND registers with Cloud Registry
     print("Configuring Network...")
     local_ip, public_url = NetworkManager.initialize()
     print(f"Network Configured. Local: {local_ip}, Public: {public_url}")
     
-    # 3. Generate QR Codes
-    # Now uses the public_url we just configured
-    print("Generating QR Codes...")
-    make_qrs.generate_qrs()
+    # 3. Get QR Base URL from registry (for display)
+    try:
+        import registry_client
+        qr_base = registry_client.get_qr_base_url()
+    except:
+        qr_base = "Registry not configured"
+    
+    # 4. Generate QR Codes (ONLY if they don't exist)
+    # QRs now point to permanent Registry URLs
+    print("Checking QR Codes...")
+    qr_generated = make_qrs.generate_qrs(force=False, use_registry=True)
+    
+    if not qr_generated and make_qrs.qrs_exist():
+        print("[INFO] Existing QR codes found (using permanent Registry URLs).")
+    
+    # Display current access URLs prominently
+    print("\n" + "="*60)
+    print("  SMART PARKING SYSTEM - ACCESS URLs")
+    print("="*60)
+    print(f"  Local Network:  http://{local_ip}:5000")
+    print(f"  External URL:   {public_url}")
+    print(f"  QR Codes:       {qr_base}/<slot_id>")
+    print("="*60 + "\n")
     
     # Pre-warm camera system (Runs in separate thread)
     camera_system = SharedCamera()
     
-    # 4. Start Server
+    # 5. Start Server
     # Threaded=True allow for concurrent requests (video feed + api)
     # use_reloader=False prevents the app from starting twice in debug mode
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=True, use_reloader=False)

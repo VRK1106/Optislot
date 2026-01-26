@@ -7,6 +7,14 @@ import sqlite3
 import os
 import requests
 
+# Import the registry client for cloud registration
+try:
+    import registry_client
+    REGISTRY_AVAILABLE = True
+except ImportError:
+    REGISTRY_AVAILABLE = False
+    print("[NetworkManager] Warning: registry_client not available")
+
 DB_NAME = "parking.db"
 DOCKER_SERVICE_NAME = "tunnel" # Adjust if your service name in compose.yaml is different
 
@@ -104,6 +112,18 @@ class NetworkManager:
             public_url = f"http://{local_ip}:5000"
             
         NetworkManager.update_db(local_ip, public_url)
+        
+        # 3. Register with Cloud Registry (for permanent QR codes)
+        if REGISTRY_AVAILABLE:
+            print("[NetworkManager] Registering with Cloud Registry...")
+            result = registry_client.register_with_registry(public_url)
+            if result:
+                print(f"[NetworkManager] ✓ Registry updated. QR Base: {result.get('qr_base_url')}")
+            else:
+                print("[NetworkManager] ⚠ Registry registration failed (QRs may need regeneration)")
+        else:
+            print("[NetworkManager] Registry client not available, skipping cloud registration")
+        
         return local_ip, public_url
 
 if __name__ == "__main__":
